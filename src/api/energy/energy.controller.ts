@@ -11,13 +11,7 @@ import {
 import { EnergyService } from './energy.service';
 import { CreateEnergyDto } from './dto/create-energy.dto';
 import { UpdateEnergyDto } from './dto/update-energy.dto';
-import { AuthGuard } from 'src/common/guards/auth.guard';
-import { RoleGuard } from 'src/common/guards/role.guard';
-import { Roles } from 'src/common/decorators/role.decorator';
-import { Role } from 'src/common/enums';
 
-@UseGuards(AuthGuard, RoleGuard)
-@Roles(Role.ADMIN)
 @Controller('energy')
 export class EnergyController {
   constructor(private readonly energyService: EnergyService) {}
