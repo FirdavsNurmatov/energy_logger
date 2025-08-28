@@ -1,12 +1,58 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { CreateEnergyDto } from './dto/create-energy.dto';
 import { PrismaService } from 'src/common/prisma/prisma.service';
-import { Cron } from '@nestjs/schedule';
+import { Cron, Interval } from '@nestjs/schedule';
+import TuyAPI from 'tuyapi';
 
 @Injectable()
 export class EnergyService {
   private readonly logger = new Logger(EnergyService.name);
-  constructor(private readonly prisma: PrismaService) {}
+  private device: any;
+
+  constructor(
+    private readonly prisma: PrismaService,
+  ) {
+    this.device = new TuyAPI({
+      id: 'your_device_id',
+      ip: '172.25.24.231',
+      key: "rdgkG#Ax4*'6z~NC",
+      version: '3.4',
+    });
+  }
+
+  @Interval(10000) // har 10 soniyada ishlaydi
+  async readDevice() {
+    try {
+      await this.device.find();
+      await this.device.connect();
+
+      const status = await this.device.get({ schema: true });
+      const dps = status.dps || {};
+
+      const power_w = (dps['19'] ?? 0) / 10;
+      const current_a = (dps['18'] ?? 0) / 1000;
+      const voltage_v = (dps['20'] ?? 0) / 10;
+
+      const payload: CreateEnergyDto = {
+        device_id: 1,
+        power_w,
+        current_a,
+        voltage_v,
+      };
+
+      // endi API ga yuborish o‘rniga create() ni chaqiramiz
+      console.log(payload)
+      await this.create(payload);
+
+      this.logger.log(
+        `Device data saved → power=${power_w}W, current=${current_a}A, voltage=${voltage_v}V`,
+      );
+
+      this.device.disconnect();
+    } catch (err) {
+      this.logger.error(`Xatolik: ${err.message}`);
+    }
+  }
 
   async create(createEnergyDto: CreateEnergyDto) {
     try {

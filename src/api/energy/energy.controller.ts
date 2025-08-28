@@ -6,12 +6,6 @@ import { CreateEnergyDto } from './dto/create-energy.dto';
 export class EnergyController {
   constructor(private readonly energyService: EnergyService) {}
 
-  @Post()
-  create(@Body() createEnergyDto: CreateEnergyDto) {
-    console.log(createEnergyDto, new Date().toLocaleTimeString('uz-UZ'));
-    return this.energyService.create(createEnergyDto);
-  }
-
   @Get('stats/:deviceId/:period')
   async getStats(
     @Param('deviceId') deviceId: string,
