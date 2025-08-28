@@ -1,23 +1,33 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
 model energy_logs {
-  id        BigInt   @id @default(autoincrement())
-  device_id Int
-  current_a Decimal?
-  voltage_v Decimal?
-  power_w   Decimal
+  id         Int      @id @default(autoincrement())
+  device_id  Int
+  current_a  Decimal? @db.Decimal(10, 3) // 10 ta raqam, ulardan 3 tasi nuqtadan keyin
+  voltage_v  Decimal? @db.Decimal(10, 3)
+  power_w    Decimal  @db.Decimal(10, 3)
   created_at DateTime @default(now())
+}
+
+model energy_logs_by_hour {
+  hour       DateTime
+  device_id  Int
+  energy_kwh Decimal  @db.Decimal(12, 3)
+
+  @@id([hour, device_id])
+}
+
+model energy_logs_by_day {
+  day        DateTime
+  device_id  Int
+  energy_kwh Decimal  @db.Decimal(14, 3)
+
+  @@id([day, device_id])
 }

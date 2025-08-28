@@ -4,7 +4,6 @@ import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import cookieParser from 'cookie-parser';
 
 export default class Application {
   public static async main(): Promise<void> {
@@ -14,7 +13,6 @@ export default class Application {
       origin: 'http://localhost:5173',
       //  credentials: true
     });
-    app.use(cookieParser());
 
     app.useGlobalPipes(
       new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
