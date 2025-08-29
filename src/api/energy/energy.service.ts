@@ -9,9 +9,7 @@ export class EnergyService {
   private readonly logger = new Logger(EnergyService.name);
   private device: any;
 
-  constructor(
-    private readonly prisma: PrismaService,
-  ) {
+  constructor(private readonly prisma: PrismaService) {
     this.device = new TuyAPI({
       id: 'your_device_id',
       ip: '172.25.24.231',
@@ -41,7 +39,7 @@ export class EnergyService {
       };
 
       // endi API ga yuborish o‘rniga create() ni chaqiramiz
-      console.log(payload)
+      console.log(payload);
       await this.create(payload);
 
       this.logger.log(
@@ -75,7 +73,7 @@ export class EnergyService {
       if (period === 'hour') {
         const res = await this.prisma.energy_logs_by_hour.findMany({
           where: { device_id: deviceId },
-          orderBy: { hour: 'asc' },
+          orderBy: { hour: 'desc' },
         });
 
         return {
@@ -89,7 +87,7 @@ export class EnergyService {
       if (period === 'day') {
         const res = await this.prisma.energy_logs_by_day.findMany({
           where: { device_id: deviceId },
-          orderBy: { day: 'asc' },
+          orderBy: { day: 'desc' },
         });
 
         return {
@@ -111,54 +109,46 @@ export class EnergyService {
     try {
       this.logger.log('Aggregating energy logs...');
 
-      // Soatlik hisoblash
+      // 1️⃣ Soatlik hisoblash
       await this.prisma.$executeRawUnsafe(`
         INSERT INTO energy_logs_by_hour (hour, device_id, energy_kwh)
-        WITH s AS (
+        SELECT hour, device_id, SUM(power_w * sec) / 3600000 AS energy_kwh
+        FROM (
           SELECT
             device_id,
             power_w,
             CAST(DATE_FORMAT(created_at, '%Y-%m-%d %H:00:00') AS DATETIME) AS hour,
-            created_at,
-            LAG(created_at) OVER (PARTITION BY device_id ORDER BY created_at) AS prev_created_at
+            GREATEST(TIMESTAMPDIFF(SECOND, 
+                      LAG(created_at) OVER (PARTITION BY device_id ORDER BY created_at), 
+                      created_at), 0) AS sec
           FROM energy_logs
-          WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 HOUR) -- faqat oxirgi tugagan soat
+          WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)
             AND created_at < UTC_TIMESTAMP()
-        )
-        SELECT
-          hour,
-          device_id,
-          SUM(power_w * IFNULL(TIMESTAMPDIFF(SECOND, prev_created_at, created_at), 10)) / 3600000 AS energy_kwh
-        FROM s
+        ) AS intervals
+        WHERE sec IS NOT NULL
         GROUP BY hour, device_id
-        ON DUPLICATE KEY UPDATE
-          energy_kwh = VALUES(energy_kwh);
+        ON DUPLICATE KEY UPDATE energy_kwh = VALUES(energy_kwh);
     `);
 
-      // Kunlik hisoblash
+      // 2️⃣ Kunlik hisoblash
       await this.prisma.$executeRawUnsafe(`
-      INSERT INTO energy_logs_by_day (day, device_id, energy_kwh)
-      WITH s AS (
-        SELECT
-          device_id,
-          power_w,
-          DATE(created_at) AS day,
-          TIMESTAMPDIFF(
-            SECOND,
-            LAG(created_at) OVER (PARTITION BY device_id ORDER BY created_at),
-            created_at
-          ) AS sec
-        FROM energy_logs
-        WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)
-      )
-      SELECT
-        day,
-        device_id,
-        SUM(power_w * IFNULL(sec, 10)) / 3600000 AS energy_kwh
-      FROM s
-      GROUP BY day, device_id
-      ON DUPLICATE KEY UPDATE
-        energy_kwh = VALUES(energy_kwh);
+        INSERT INTO energy_logs_by_day (day, device_id, energy_kwh)
+        SELECT day, device_id, SUM(power_w * sec) / 3600000 AS energy_kwh
+        FROM (
+          SELECT
+            device_id,
+            power_w,
+            DATE(created_at) AS day,
+            GREATEST(TIMESTAMPDIFF(SECOND, 
+                      LAG(created_at) OVER (PARTITION BY device_id ORDER BY created_at), 
+                      created_at), 0) AS sec
+          FROM energy_logs
+          WHERE created_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY)
+            AND created_at < UTC_TIMESTAMP()
+        ) AS intervals
+        WHERE sec IS NOT NULL
+        GROUP BY day, device_id
+        ON DUPLICATE KEY UPDATE energy_kwh = VALUES(energy_kwh);
     `);
 
       this.logger.log('Energy logs aggregated successfully ✅');
